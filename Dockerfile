@@ -16,7 +16,7 @@ RUN --mount=type=bind,from=infiniflow/ragflow_deps:latest,source=/huggingface.co
     tar --exclude='.*' -cf - \
         /huggingface.co/InfiniFlow/text_concat_xgb_v1.0 \
         /huggingface.co/InfiniFlow/deepdoc \
-        | tar -xf - --strip-components=3 -C /ragflow/rag/res/deepdoc 
+        | tar -xf - --strip-components=3 -C /ragflow/rag/res/deepdoc
 RUN --mount=type=bind,from=infiniflow/ragflow_deps:latest,source=/huggingface.co,target=/huggingface.co \
     if [ "$LIGHTEN" != "1" ]; then \
         (tar -cf - \
@@ -84,26 +84,47 @@ RUN --mount=type=cache,id=ragflow_apt,target=/var/cache/apt,sharing=locked \
     apt purge -y nodejs npm && \
     apt autoremove && \
     apt update && \
-    apt install -y nodejs cargo 
-    
+    apt install -y nodejs cargo
+
 
 # Add msssql ODBC driver
 # macOS ARM64 environment, install msodbcsql18.
 # general x86_64 environment, install msodbcsql17.
+### original case
+# RUN --mount=type=cache,id=ragflow_apt,target=/var/cache/apt,sharing=locked \
+#     curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+#     curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list > /etc/apt/sources.list.d/mssql-release.list && \
+#     apt update && \
+#     if [ -n "$ARCH" ] && [ "$ARCH" = "arm64" ]; then \
+#         # MacOS ARM64
+#         ACCEPT_EULA=Y apt install -y unixodbc-dev msodbcsql18; \
+#     else \
+#         # (x86_64)
+#         ACCEPT_EULA=Y apt install -y unixodbc-dev msodbcsql17; \
+#     fi || \
+#     { echo "Failed to install ODBC driver"; exit 1; }
+####################
+
 RUN --mount=type=cache,id=ragflow_apt,target=/var/cache/apt,sharing=locked \
-    curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
-    curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list > /etc/apt/sources.list.d/mssql-release.list && \
+    apt install -y gnupg2
+RUN --mount=type=cache,id=ragflow_apt,target=/var/cache/apt,sharing=locked \
+    curl -o microsoft.asc https://packages.microsoft.com/keys/microsoft.asc && \
+    apt-key add microsoft.asc
+
+    RUN --mount=type=cache,id=ragflow_apt,target=/var/cache/apt,sharing=locked \
     apt update && \
-    if [ -n "$ARCH" ] && [ "$ARCH" = "arm64" ]; then \
-        # MacOS ARM64 
-        ACCEPT_EULA=Y apt install -y unixodbc-dev msodbcsql18; \
-    else \
-        # (x86_64)
+    ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "arm64" ]; then \
+        echo "Installing msodbcsql18 for ARM64..."; \
+        ACCEPT_EULA=Y apt install -y unixodbc-dev msodbcsql18 || echo "msodbcsql18 not supported on ARM64; skipping"; \
+    elif [ "$ARCH" = "amd64" ]; then \
+        echo "Installing msodbcsql17 for AMD64..."; \
         ACCEPT_EULA=Y apt install -y unixodbc-dev msodbcsql17; \
-    fi || \
-    { echo "Failed to install ODBC driver"; exit 1; }
-
-
+    else \
+        echo "Unsupported architecture: $ARCH"; \
+        exit 1; \
+    fi
+##########################################
 
 # Add dependencies of selenium
 RUN --mount=type=bind,from=infiniflow/ragflow_deps:latest,source=/chrome-linux64-121-0-6167-85,target=/chrome-linux64.zip \
